@@ -43,18 +43,35 @@ const VersoExecution: React.FC<VersoExecutionProps> = ({ process, instance, onUp
 
   const canInteractWithStep = (stepId: string) => {
       if (isReadOnlyStatus) return false;
-      if (isGlobalAdminUser) return true;
+      
       if (!isDesignatedExecutor) return false;
       
       const step = process.steps.find(s => s.id === stepId);
       if (!step) return false;
       
-      // Strict assignment check within the executor team/role
-      return step.assignedUserIds?.includes(currentUser.id) || 
+      // 1. Strict Assignment Check
+      const isDirectlyAssigned = 
+             step.assignedUserIds?.includes(currentUser.id) || 
              step.assignedTeamIds?.includes(currentUser.team) || 
              step.assignedJobTitles?.includes(currentUser.jobTitle) || 
              step.assignedJobTitle === currentUser.jobTitle ||
              (!step.assignedUserIds?.length && !step.assignedTeamIds?.length && !step.assignedJobTitles?.length && !step.assignedJobTitle);
+
+      if (isDirectlyAssigned) return true;
+
+      // 2. Managerial Override (Team Lead Logic)
+      
+      // Case A: I am the Lead of the Process's Owning Category (e.g. Finance Lead overriding a Finance step)
+      const owningTeam = teams.find(t => t.name === process.category);
+      if (owningTeam && owningTeam.leadUserId === currentUser.id) return true;
+
+      // Case B: I am the Lead of the Team explicitly assigned to this step
+      if (step.assignedTeamIds && step.assignedTeamIds.length > 0) {
+          const leadsOfAssignedTeams = step.assignedTeamIds.map(tName => teams.find(t => t.name === tName)?.leadUserId);
+          if (leadsOfAssignedTeams.includes(currentUser.id)) return true;
+      }
+
+      return false;
   };
 
   const canManageRun = isDesignatedExecutor || isGlobalAdminUser;
@@ -97,19 +114,85 @@ const VersoExecution: React.FC<VersoExecutionProps> = ({ process, instance, onUp
     adjustTextAreaHeight(stepId);
   };
 
-  const handleTextCommit = (stepId: string, isLocked: boolean) => {
-    if (textAreaRefs.current[stepId]) textAreaRefs.current[stepId]!.style.height = ''; 
-    setFocusedStepId(null);
-    if (isReadOnlyStatus || isLocked || !canInteractWithStep(stepId)) return;
-    const value = instance.stepValues[stepId] || '';
-    const isInputFilled = value.trim().length > 0;
-    let newCompletedIds = isInputFilled ? (instance.completedStepIds.includes(stepId) ? instance.completedStepIds : [...instance.completedStepIds, stepId]) : instance.completedStepIds.filter(id => id !== stepId);
+  const handleTextClear = (stepId: string) => {
+    if (isReadOnlyStatus || !canInteractWithStep(stepId)) return;
+    
+    // Clear value
+    const newStepValues = { ...instance.stepValues };
+    delete newStepValues[stepId];
+    
+    // Remove from completed
+    const newCompletedIds = instance.completedStepIds.filter(id => id !== stepId);
+    
+    // Recalculate Run Status
     let nextStatus = instance.status;
     if (nextStatus === 'NOT_STARTED' || nextStatus === 'REJECTED') nextStatus = 'IN_PROGRESS';
     const allStrictlyDone = visibleSteps.filter(s => s.required && s.inputType !== StepType.INFO).every(s => newCompletedIds.includes(s.id));
     if (nextStatus === 'IN_PROGRESS' && allStrictlyDone) nextStatus = 'READY_TO_SUBMIT';
     else if (nextStatus === 'READY_TO_SUBMIT' && !allStrictlyDone) nextStatus = 'IN_PROGRESS';
-    onUpdateInstance({ ...instance, completedStepIds: newCompletedIds, status: nextStatus as RunStatus });
+
+    // Audit Log
+    const stepIdx = visibleSteps.findIndex(s => s.id === stepId);
+    const step = visibleSteps[stepIdx];
+    const strictMatch = step && (
+        step.assignedUserIds?.includes(currentUser.id) || 
+        step.assignedJobTitles?.includes(currentUser.jobTitle) || 
+        step.assignedJobTitle === currentUser.jobTitle ||
+        (!step.assignedUserIds?.length && step.assignedTeamIds?.includes(currentUser.team))
+    );
+    const isOverride = !strictMatch && canInteractWithStep(stepId);
+
+    const newLog = [{ id: `l-${Date.now()}`, userId: currentUser.id, userName: `${currentUser.firstName} ${currentUser.lastName}`, action: `Cleared input for step ${stepIdx + 1}${isOverride ? ' (Team Lead Override)' : ''}`, timestamp: new Date().toISOString() }, ...instance.activityLog];
+
+    onUpdateInstance({ ...instance, stepValues: newStepValues, completedStepIds: newCompletedIds, status: nextStatus as RunStatus, activityLog: newLog });
+    
+    // Reset height if focused
+    if (textAreaRefs.current[stepId]) textAreaRefs.current[stepId]!.style.height = 'auto'; 
+  };
+
+  const handleTextCommit = (stepId: string, isLocked: boolean) => {
+    if (textAreaRefs.current[stepId]) textAreaRefs.current[stepId]!.style.height = ''; 
+    setFocusedStepId(null);
+    if (isReadOnlyStatus || isLocked || !canInteractWithStep(stepId)) return;
+    
+    const value = instance.stepValues[stepId] || '';
+    const isInputFilled = value.trim().length > 0;
+    
+    const wasCompleted = instance.completedStepIds.includes(stepId);
+    let newCompletedIds = isInputFilled 
+        ? (wasCompleted ? instance.completedStepIds : [...instance.completedStepIds, stepId]) 
+        : instance.completedStepIds.filter(id => id !== stepId);
+    
+    let nextStatus = instance.status;
+    if (nextStatus === 'NOT_STARTED' || nextStatus === 'REJECTED') nextStatus = 'IN_PROGRESS';
+    const allStrictlyDone = visibleSteps.filter(s => s.required && s.inputType !== StepType.INFO).every(s => newCompletedIds.includes(s.id));
+    if (nextStatus === 'IN_PROGRESS' && allStrictlyDone) nextStatus = 'READY_TO_SUBMIT';
+    else if (nextStatus === 'READY_TO_SUBMIT' && !allStrictlyDone) nextStatus = 'IN_PROGRESS';
+
+    // AUDIT LOG GENERATION
+    let newLog = instance.activityLog;
+    const stepIdx = visibleSteps.findIndex(s => s.id === stepId);
+    const step = visibleSteps[stepIdx];
+    
+    // Check if this is an override
+    const strictMatch = step && (
+        step.assignedUserIds?.includes(currentUser.id) || 
+        step.assignedJobTitles?.includes(currentUser.jobTitle) || 
+        step.assignedJobTitle === currentUser.jobTitle ||
+        (!step.assignedUserIds?.length && step.assignedTeamIds?.includes(currentUser.team))
+    );
+    const isOverride = !strictMatch && canInteractWithStep(stepId);
+
+    if (isInputFilled && !wasCompleted) {
+        newLog = [{ id: `l-${Date.now()}`, userId: currentUser.id, userName: `${currentUser.firstName} ${currentUser.lastName}`, action: `Completed step ${stepIdx + 1}${isOverride ? ' (Team Lead Override)' : ''}`, timestamp: new Date().toISOString() }, ...instance.activityLog];
+    } else if (!isInputFilled && wasCompleted) {
+        newLog = [{ id: `l-${Date.now()}`, userId: currentUser.id, userName: `${currentUser.firstName} ${currentUser.lastName}`, action: `Cleared step ${stepIdx + 1}${isOverride ? ' (Team Lead Override)' : ''}`, timestamp: new Date().toISOString() }, ...instance.activityLog];
+    } else if (isInputFilled && wasCompleted) {
+        // Log update
+        newLog = [{ id: `l-${Date.now()}`, userId: currentUser.id, userName: `${currentUser.firstName} ${currentUser.lastName}`, action: `Updated input for step ${stepIdx + 1}${isOverride ? ' (Team Lead Override)' : ''}`, timestamp: new Date().toISOString() }, ...instance.activityLog];
+    }
+
+    onUpdateInstance({ ...instance, completedStepIds: newCompletedIds, status: nextStatus as RunStatus, activityLog: newLog });
   };
 
   const handleFileUpload = (stepId: string, file: File, isLocked: boolean) => {
@@ -121,6 +204,7 @@ const VersoExecution: React.FC<VersoExecutionProps> = ({ process, instance, onUp
         let nextStatus = (instance.status === 'NOT_STARTED' || instance.status === 'REJECTED') ? 'IN_PROGRESS' : instance.status;
         const allStrictlyDone = visibleSteps.filter(s => s.required && s.inputType !== StepType.INFO).every(s => newCompletedIds.includes(s.id));
         if (nextStatus === 'IN_PROGRESS' && allStrictlyDone) nextStatus = 'READY_TO_SUBMIT';
+        
         onUpdateInstance({ ...instance, stepValues: { ...instance.stepValues, [stepId]: fileData }, completedStepIds: newCompletedIds, status: nextStatus as RunStatus, activityLog: [{ id: `l-${Date.now()}`, userId: currentUser.id, userName: `${currentUser.firstName} ${currentUser.lastName}`, action: `Uploaded evidence: ${file.name}`, timestamp: new Date().toISOString() }, ...instance.activityLog] });
         setUploadingSteps(prev => ({ ...prev, [stepId]: false }));
     }, 1500);
@@ -139,15 +223,32 @@ const VersoExecution: React.FC<VersoExecutionProps> = ({ process, instance, onUp
   const toggleStepCompletion = (stepId: string, idx: number) => {
     if (isReadOnlyStatus) return;
     const step = visibleSteps.find(s => s.id === stepId);
-    if (!step || step.inputType === StepType.FILE_UPLOAD || step.inputType === StepType.TEXT_INPUT || step.inputType === StepType.INFO || !canInteractWithStep(stepId)) return;
+    
+    // SAFETY: Prevent toggling Automated Steps via the checkbox.
+    // Data must be explicitly removed (trash icon or clear text) to uncheck.
+    if (!step || step.inputType === StepType.INFO || step.inputType === StepType.TEXT_INPUT || step.inputType === StepType.FILE_UPLOAD || !canInteractWithStep(stepId)) return;
+    
     const isCompleted = instance.completedStepIds.includes(stepId);
     if (!isCompleted && isStepLocked(idx)) return; 
+
+    // Manual Checkbox Logic Only below this point
     const newCompletedIds = isCompleted ? instance.completedStepIds.filter(id => id !== stepId) : [...instance.completedStepIds, stepId];
     let nextStatus = (instance.status === 'NOT_STARTED' || instance.status === 'REJECTED') ? 'IN_PROGRESS' : instance.status;
     const allStrictlyDone = visibleSteps.filter(s => s.required && s.inputType !== StepType.INFO).every(s => newCompletedIds.includes(s.id));
+    
     if (nextStatus === 'IN_PROGRESS' && allStrictlyDone) nextStatus = 'READY_TO_SUBMIT';
     else if (nextStatus === 'READY_TO_SUBMIT' && !allStrictlyDone) nextStatus = 'IN_PROGRESS';
-    onUpdateInstance({ ...instance, completedStepIds: newCompletedIds, status: nextStatus as RunStatus, activityLog: [{ id: `l-${Date.now()}`, userId: currentUser.id, userName: `${currentUser.firstName} ${currentUser.lastName}`, action: isCompleted ? `Unchecked step ${idx + 1}` : `Completed step ${idx + 1}`, timestamp: new Date().toISOString() }, ...instance.activityLog] });
+    
+    // Check override for log
+    const strictMatch = step && (
+        step.assignedUserIds?.includes(currentUser.id) || 
+        step.assignedJobTitles?.includes(currentUser.jobTitle) || 
+        step.assignedJobTitle === currentUser.jobTitle ||
+        (!step.assignedUserIds?.length && step.assignedTeamIds?.includes(currentUser.team))
+    );
+    const isOverride = !strictMatch;
+
+    onUpdateInstance({ ...instance, completedStepIds: newCompletedIds, status: nextStatus as RunStatus, activityLog: [{ id: `l-${Date.now()}`, userId: currentUser.id, userName: `${currentUser.firstName} ${currentUser.lastName}`, action: isCompleted ? `Unchecked step ${idx + 1}${isOverride ? ' (Team Lead Override)' : ''}` : `Completed step ${idx + 1}${isOverride ? ' (Team Lead Override)' : ''}`, timestamp: new Date().toISOString() }, ...instance.activityLog] });
   };
 
   const handleFeedbackSubmit = (stepId: string) => {
@@ -204,7 +305,7 @@ const VersoExecution: React.FC<VersoExecutionProps> = ({ process, instance, onUp
       )}
 
       <div className="flex-1 overflow-y-auto custom-scrollbar p-10 flex justify-center">
-        <div className="w-full max-w-4xl space-y-8">
+        <div className="w-full max-w-4xl space-y-8 pb-20">
             <div className="bg-white rounded-[2rem] p-8 border border-slate-200 shadow-sm relative overflow-hidden"><div className="absolute top-0 left-0 h-1.5 bg-slate-100 w-full"><div className="h-full bg-indigo-600 transition-all duration-1000 ease-out" style={{ width: `${progress}%` }}></div></div><div className="flex justify-between items-end relative z-10"><div><div className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Process Definition</div><h2 className="text-3xl font-light text-slate-900">{process.title}</h2><p className="text-slate-500 mt-2 text-sm max-w-2xl leading-relaxed">{process.description}</p></div><div className="text-right"><div className="text-5xl font-black text-indigo-600 tracking-tighter">{progress}%</div><div className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Completed</div></div></div></div>
             <div className="space-y-4">
                 {visibleSteps.map((step, idx) => (
@@ -216,7 +317,7 @@ const VersoExecution: React.FC<VersoExecutionProps> = ({ process, instance, onUp
                         isInfoStep={step.inputType === StepType.INFO} isFocused={focusedStepId === step.id}
                         stepValue={instance.stepValues[step.id]} uploading={!!uploadingSteps[step.id]}
                         feedbacks={instance.stepFeedback?.[step.id] || []} renderStyledText={renderStyledText}
-                        onToggle={toggleStepCompletion} onTextChange={handleTextChange} onTextKeyDown={(e, id) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); textAreaRefs.current[id]?.blur(); }}}
+                        onToggle={toggleStepCompletion} onTextChange={handleTextChange} onTextClear={handleTextClear} onTextKeyDown={(e, id) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); textAreaRefs.current[id]?.blur(); }}}
                         onTextFocus={setFocusedStepId} onTextBlur={handleTextCommit} onFileUpload={handleFileUpload} onFileRemove={handleFileRemove}
                         onAddFeedback={setFeedbackModalOpen} onResolveFeedback={(sId, fbId) => onUpdateInstance({ ...instance, stepFeedback: { ...instance.stepFeedback, [sId]: instance.stepFeedback[sId].map(f => f.id === fbId ? { ...f, resolved: true } : f) } })}
                         textAreaRef={(el) => { textAreaRefs.current[step.id] = el; }}
@@ -344,7 +445,48 @@ const VersoExecution: React.FC<VersoExecutionProps> = ({ process, instance, onUp
                     </div>
                 </div>
             </div>
-            <div className="h-[35vh] w-full pointer-events-none" aria-hidden="true" />
+
+            {/* AUDIT TRAIL / ACTIVITY LOG TIMELINE */}
+            {instance.activityLog && instance.activityLog.length > 0 && (
+                <div className="mt-16 max-w-3xl mx-auto">
+                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-8 text-center flex items-center justify-center gap-3">
+                        <span className="h-px w-8 bg-slate-200"></span>
+                        Audit Trail
+                        <span className="h-px w-8 bg-slate-200"></span>
+                    </h3>
+                    <div className="space-y-0 border-l-2 border-slate-100 ml-6 pl-8 relative pb-2">
+                        {instance.activityLog.sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).map((log, i) => {
+                            const isLatest = i === 0;
+                            return (
+                                <div key={log.id} className="relative pb-10 last:pb-0">
+                                    {/* Timeline Dot */}
+                                    <div className={`absolute -left-[41px] top-1 w-6 h-6 rounded-full border-4 box-border flex items-center justify-center ${isLatest ? 'bg-indigo-600 border-indigo-100 shadow-md ring-2 ring-white' : 'bg-white border-slate-200'}`}>
+                                        {isLatest && <div className="w-1.5 h-1.5 bg-white rounded-full"></div>}
+                                    </div>
+                                    
+                                    <div className="flex items-start gap-4 group">
+                                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 transition-colors ${getUserColor(allUsers.find(u => u.id === log.userId)?.team || 'External')}`}>
+                                            {log.userName[0]}
+                                        </div>
+                                        <div>
+                                            <div className={`text-sm font-bold transition-colors ${isLatest ? 'text-slate-900' : 'text-slate-600 group-hover:text-slate-800'}`}>
+                                                {log.action}
+                                            </div>
+                                            <div className="text-[10px] text-slate-400 font-medium mt-0.5 flex items-center gap-1.5">
+                                                <span>{log.userName}</span>
+                                                <span className="w-0.5 h-0.5 rounded-full bg-slate-300"></span>
+                                                <span>{new Date(log.timestamp).toLocaleDateString()} at {new Date(log.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
+            <div className="h-[20vh] w-full pointer-events-none" aria-hidden="true" />
         </div>
       </div>
 

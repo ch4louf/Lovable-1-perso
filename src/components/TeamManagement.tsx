@@ -1,8 +1,10 @@
+
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { User, UserPermissions, Team } from '../types';
-import { Users, Plus, ShieldCheck, Zap, UserX, Crown, Eye, CheckSquare, CreditCard, Pencil, Lock, Search, RotateCcw, X, Check, Mail, Settings, ArrowUp, ArrowDown, CheckCircle2, Trash2, User as UserIcon, ShieldAlert, LayoutGrid, Palette, Shield } from 'lucide-react';
+import { Users, Plus, ShieldCheck, Zap, UserX, Crown, Eye, CheckSquare, CreditCard, Pencil, Lock, Search, RotateCcw, X, Check, Mail, Settings, ArrowUp, ArrowDown, CheckCircle2, Trash2, User as UserIcon, ShieldAlert, LayoutGrid, Palette, Shield, FileText, Download, Calendar } from 'lucide-react';
 import CustomSelect from './CustomSelect';
 import { useUser } from '../contexts/UserContext';
+import { useUI } from '../contexts/UIContext';
 
 interface TeamManagementProps {
   searchTerm: string; 
@@ -113,6 +115,7 @@ interface ConfirmationModalConfig {
 
 const TeamManagement: React.FC<TeamManagementProps> = ({ searchTerm, setSearchTerm, filterRole, setFilterRole, filterStatus, setFilterStatus, isFilterOpen, setIsFilterOpen, isSortOpen, setIsSortOpen, sortConfig, onSort, activeHeaderMenu, onToggleHeaderMenu, onClearFilters }) => {
   const { users: initialUsers, teams, currentUser, updateUsers: onUpdateUsers, inviteUser: onInviteUser, addTeam, updateTeam: onUpdateTeam, deleteTeam, getUserColor } = useUser();
+  const { showToast } = useUI();
 
   const [activeTab, setActiveTab] = useState<'MEMBERS' | 'TEAMS'>('MEMBERS');
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
@@ -125,6 +128,15 @@ const TeamManagement: React.FC<TeamManagementProps> = ({ searchTerm, setSearchTe
   const [inviteStatus, setInviteStatus] = useState<'idle' | 'sending' | 'sent'>('idle');
   const [confirmConfig, setConfirmConfig] = useState<ConfirmationModalConfig | null>(null);
   const filterRef = useRef<HTMLDivElement>(null);
+
+  // --- AUDIT EXPORT STATE ---
+  const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
+  const [auditConfig, setAuditConfig] = useState({
+      includeMatrix: true,
+      historyDuration: '90', // days
+      recipientEmail: ''
+  });
+  const [isSendingAudit, setIsSendingAudit] = useState(false);
 
   const defaultPerms: UserPermissions = {
     canDesign: false,
@@ -162,6 +174,14 @@ const TeamManagement: React.FC<TeamManagementProps> = ({ searchTerm, setSearchTe
     { label: 'Red', value: 'red', color: 'bg-red-500' },
   ];
 
+  const durationOptions = [
+      { label: 'Last 24 Hours', value: '1' },
+      { label: 'Last 30 Days', value: '30' },
+      { label: 'Last 90 Days (Quarterly)', value: '90' },
+      { label: 'Last 1 Year', value: '365' },
+      { label: 'All Time', value: 'all' }
+  ];
+
   let filteredUsers = initialUsers.filter(u => (!searchTerm || `${u.firstName} ${u.lastName} ${u.team} ${u.email} ${u.jobTitle}`.toLowerCase().includes(searchTerm.toLowerCase())));
   
   filteredUsers.sort((a, b) => {
@@ -177,6 +197,29 @@ const TeamManagement: React.FC<TeamManagementProps> = ({ searchTerm, setSearchTe
   });
 
   const activeFilterCount = (searchTerm ? 1 : 0);
+
+  // --- HANDLERS ---
+
+  const handleOpenAuditModal = () => {
+      setAuditConfig({
+          includeMatrix: true,
+          historyDuration: '90',
+          recipientEmail: currentUser.email
+      });
+      setIsAuditModalOpen(true);
+  };
+
+  const handleSendAuditReport = (e: React.FormEvent) => {
+      e.preventDefault();
+      setIsSendingAudit(true);
+      
+      // Simulate API call and generation delay
+      setTimeout(() => {
+          setIsSendingAudit(false);
+          setIsAuditModalOpen(false);
+          showToast(`Audit Report sent to ${auditConfig.recipientEmail}`);
+      }, 1500);
+  };
 
   const handleInviteSubmit = (e: React.FormEvent) => {
     e.preventDefault(); 
@@ -340,7 +383,7 @@ const TeamManagement: React.FC<TeamManagementProps> = ({ searchTerm, setSearchTe
       });
   };
 
-  const applyRolePreset = (preset: 'ADMIN' | 'STANDARD' | 'GUEST') => {
+  const applyRolePreset = (preset: 'ADMIN' | 'STANDARD' | 'AUDITOR') => {
     if (!panelUser || !canManage) return;
     if (panelUser.permissions.canManageTeam && !currentUser.permissions.canManageTeam) {
         alert("Access Denied: You cannot modify an Administrator.");
@@ -361,7 +404,7 @@ const TeamManagement: React.FC<TeamManagementProps> = ({ searchTerm, setSearchTe
           canManageTeam: true, 
           canAccessBilling: true 
         };
-    } else if (preset === 'GUEST') {
+    } else if (preset === 'AUDITOR') {
         newPerms = { ...defaultPerms }; 
     } else {
         newPerms = { 
@@ -388,7 +431,7 @@ const TeamManagement: React.FC<TeamManagementProps> = ({ searchTerm, setSearchTe
   };
 
   const isPanelAdmin = panelUser?.permissions.canManageTeam && panelUser?.permissions.canAccessBilling;
-  const isPanelGuest = panelUser && !Object.values(panelUser.permissions).some(Boolean);
+  const isPanelAuditor = panelUser && !Object.values(panelUser.permissions).some(Boolean);
 
   return (
     <div className="relative h-full flex flex-col">
@@ -425,7 +468,18 @@ const TeamManagement: React.FC<TeamManagementProps> = ({ searchTerm, setSearchTe
                         <input className="pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-xs w-full focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm" placeholder="Find member..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
                     </div>
                 )}
+                
+                {canManage && (
+                    <>
+                        <button onClick={handleOpenAuditModal} className="flex items-center gap-2 px-3 py-2 text-slate-500 bg-white border border-slate-200 hover:border-indigo-200 hover:text-indigo-600 rounded-lg text-xs font-bold transition-all shadow-sm" title="Export Security & Audit Report">
+                            <FileText size={16} /> <span className="hidden xl:inline">Export Audit</span>
+                        </button>
+                        <div className="w-px h-6 bg-slate-200 mx-1"></div>
+                    </>
+                )}
+
                 {activeFilterCount > 0 && <button onClick={onClearFilters} className="flex items-center gap-2 px-3 py-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-lg text-xs font-bold transition-colors"><RotateCcw size={14} /> Reset</button>}
+                
                 {canManage && (
                     <button onClick={() => activeTab === 'MEMBERS' ? setIsInviteModalOpen(true) : (setNewTeam({ name: '', description: '', color: 'indigo' }), setIsTeamModalOpen(true))} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg shadow-sm hover:bg-indigo-700 font-medium transition-colors shrink-0 animate-in fade-in">
                         <Plus size={18} /> {activeTab === 'MEMBERS' ? 'Invite' : 'Add Team'}
@@ -462,7 +516,7 @@ const TeamManagement: React.FC<TeamManagementProps> = ({ searchTerm, setSearchTe
                             const isInlineEditing = inlineEditingId === user.id;
                             const isPanelActive = activePanelUserId === user.id;
                             const isAdmin = p.canManageTeam && p.canAccessBilling;
-                            const isGuest = !Object.values(p).some(Boolean);
+                            const isAuditor = !Object.values(p).some(Boolean);
                             const canEdit = canManage && (!isAdmin || currentUser.permissions.canManageTeam);
 
                             return (
@@ -500,7 +554,7 @@ const TeamManagement: React.FC<TeamManagementProps> = ({ searchTerm, setSearchTe
                                     ) : user.jobTitle}
                                 </div>
                                 <div className="col-span-2 flex flex-wrap justify-start gap-1.5">
-                                    {isAdmin ? <PermissionBadge icon={Crown} label="Admin" colorClass="amber" /> : isGuest ? <PermissionBadge icon={Eye} label="Viewer" colorClass="slate" /> : (
+                                    {isAdmin ? <PermissionBadge icon={Crown} label="Admin" colorClass="amber" /> : isAuditor ? <PermissionBadge icon={Eye} label="Auditor" colorClass="slate" /> : (
                                         <>
                                           {activePerms.map((perm, idx) => (
                                             <PermissionBadge key={idx} icon={perm.icon} label={perm.label} colorClass={perm.color} />
@@ -576,6 +630,76 @@ const TeamManagement: React.FC<TeamManagementProps> = ({ searchTerm, setSearchTe
         </div>
       </div>
 
+      {/* AUDIT REPORT EXPORT MODAL */}
+      {isAuditModalOpen && (
+        <div className="fixed inset-0 z-[500] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md animate-in zoom-in-95 duration-200 border border-white/20 overflow-hidden flex flex-col">
+                <div className="px-8 py-6 border-b border-slate-50 flex justify-between items-center bg-slate-50/50">
+                    <h3 className="font-bold text-slate-900 flex items-center gap-3">
+                        <div className="p-2 bg-indigo-100 text-indigo-600 rounded-xl">
+                            <FileText size={20} />
+                        </div>
+                        Security & Access Report
+                    </h3>
+                    <button onClick={() => setIsAuditModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1 hover:bg-slate-100 rounded-lg transition-all"><X size={20} /></button>
+                </div>
+                
+                <form onSubmit={handleSendAuditReport} className="p-8 space-y-6">
+                    <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-2xl flex items-start gap-3">
+                        <ShieldCheck size={20} className="text-indigo-600 mt-0.5 shrink-0" />
+                        <div>
+                            <h4 className="text-xs font-bold text-indigo-900 mb-1">Push-Based Audit</h4>
+                            <p className="text-[11px] text-indigo-700/80 leading-relaxed">
+                                Securely transmit a static snapshot of the system state to an external auditor without granting them persistent login access.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="flex items-center justify-between mb-4 cursor-pointer group">
+                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest group-hover:text-indigo-600 transition-colors">Include Permission Matrix</span>
+                            <div className={`w-10 h-5 rounded-full relative transition-colors ${auditConfig.includeMatrix ? 'bg-indigo-600' : 'bg-slate-200'}`} onClick={() => setAuditConfig({...auditConfig, includeMatrix: !auditConfig.includeMatrix})}>
+                                <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-transform shadow-sm ${auditConfig.includeMatrix ? 'left-6' : 'left-1'}`} />
+                            </div>
+                        </label>
+                        <p className="text-[10px] text-slate-400 -mt-2 mb-4 pl-1">Snapshots current roles, access levels, and team assignments.</p>
+                        
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block px-1">Audit Trail History</label>
+                        <CustomSelect 
+                            value={auditConfig.historyDuration} 
+                            onChange={(val) => setAuditConfig({...auditConfig, historyDuration: val})} 
+                            options={durationOptions} 
+                            icon={Calendar} 
+                            variant="standard" 
+                        />
+                    </div>
+
+                    <div>
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block px-1">Recipient Email</label>
+                        <div className="relative">
+                            <Mail className="absolute left-3 top-3 text-slate-400" size={16} />
+                            <input 
+                                type="email" 
+                                required 
+                                className="w-full border border-slate-200 rounded-xl pl-10 pr-4 py-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium text-slate-700"
+                                placeholder="auditor@firm.com"
+                                value={auditConfig.recipientEmail}
+                                onChange={(e) => setAuditConfig({...auditConfig, recipientEmail: e.target.value})}
+                            />
+                        </div>
+                    </div>
+
+                    <div className="pt-4 border-t border-slate-50 flex justify-end gap-3">
+                        <button type="button" onClick={() => setIsAuditModalOpen(false)} className="px-5 py-3 text-xs font-bold text-slate-500 hover:bg-slate-50 rounded-xl transition-all uppercase tracking-widest">Cancel</button>
+                        <button type="submit" disabled={isSendingAudit || !auditConfig.recipientEmail} className="px-6 py-3 bg-indigo-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                            {isSendingAudit ? 'Generating...' : <><Download size={16} /> Generate & Send</>}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+      )}
+
       {isTeamModalOpen && (
         <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md animate-in zoom-in-95 duration-200 flex flex-col overflow-visible">
@@ -635,8 +759,8 @@ const TeamManagement: React.FC<TeamManagementProps> = ({ searchTerm, setSearchTe
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 block">Quick Role Presets</label>
                         <div className="grid grid-cols-3 gap-3">
                             <RoleCard selected={isPanelAdmin} title="Admin" icon={Crown} colorClass="amber" onClick={() => applyRolePreset('ADMIN')} />
-                            <RoleCard selected={!isPanelAdmin && !isPanelGuest} title="Standard" icon={Users} colorClass="indigo" onClick={() => applyRolePreset('STANDARD')} />
-                            <RoleCard selected={isPanelGuest} title="Guest" icon={Eye} colorClass="slate" onClick={() => applyRolePreset('GUEST')} />
+                            <RoleCard selected={!isPanelAdmin && !isPanelAuditor} title="Standard" icon={Users} colorClass="indigo" onClick={() => applyRolePreset('STANDARD')} />
+                            <RoleCard selected={isPanelAuditor} title="Auditor" icon={Eye} colorClass="slate" onClick={() => applyRolePreset('AUDITOR')} />
                         </div>
                     </div>
 

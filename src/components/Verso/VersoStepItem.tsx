@@ -19,6 +19,7 @@ interface VersoStepItemProps {
   renderStyledText: (text: string) => React.ReactNode;
   onToggle: (id: string, idx: number) => void;
   onTextChange: (id: string, val: string, locked: boolean) => void;
+  onTextClear: (id: string) => void;
   onTextKeyDown: (e: React.KeyboardEvent, id: string) => void;
   onTextFocus: (id: string) => void;
   onTextBlur: (id: string, locked: boolean) => void;
@@ -31,7 +32,7 @@ interface VersoStepItemProps {
 
 export const VersoStepItem: React.FC<VersoStepItemProps> = ({
   step, idx, status, locked, isReadOnly, canInteract, isAutomatedStep, isInfoStep, isFocused,
-  stepValue, uploading, feedbacks, renderStyledText, onToggle, onTextChange, onTextKeyDown,
+  stepValue, uploading, feedbacks, renderStyledText, onToggle, onTextChange, onTextClear, onTextKeyDown,
   onTextFocus, onTextBlur, onFileUpload, onFileRemove, onAddFeedback, onResolveFeedback, textAreaRef
 }) => {
   const isCompleted = status === 'COMPLETED';
@@ -46,9 +47,15 @@ export const VersoStepItem: React.FC<VersoStepItemProps> = ({
                     </div>
                 ) : (
                     <button 
+                        // SAFETY: Automated steps cannot be toggled via the checkbox. 
+                        // Completion is driven by data (file upload/text entry).
                         disabled={isReadOnly || isAutomatedStep || !canInteract}
                         onClick={() => onToggle(step.id, idx)}
-                        title={locked ? "Sequential enforcement: Complete previous tasks first." : !canInteract ? "You do not have permission to execute this step." : ""}
+                        title={
+                            isAutomatedStep ? "Complete by filling the required field below." : 
+                            locked ? "Sequential enforcement: Complete previous tasks first." : 
+                            !canInteract ? "You do not have permission to execute this step." : ""
+                        }
                         className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${
                             status === 'COMPLETED' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200 border border-transparent' : 
                             locked ? 'bg-slate-100 text-slate-300 cursor-not-allowed border border-transparent' :
@@ -78,7 +85,7 @@ export const VersoStepItem: React.FC<VersoStepItemProps> = ({
                         </h3>
                         
                         {step.inputType === StepType.TEXT_INPUT && (
-                            <div className="mt-4 max-w-lg relative">
+                            <div className="mt-4 max-w-lg relative group/input">
                                 <textarea 
                                     ref={textAreaRef}
                                     disabled={isReadOnly || !canInteract}
@@ -90,7 +97,7 @@ export const VersoStepItem: React.FC<VersoStepItemProps> = ({
                                     rows={1}
                                     title={locked && !isCompleted ? "Complete previous steps to unlock." : !canInteract ? "Permission required." : ""}
                                     placeholder={locked && !isCompleted ? "Locked" : !canInteract ? "Restricted" : "Enter details..."}
-                                    className={`w-full py-2 border-b-2 outline-none resize-none transition-all duration-300 text-sm font-bold ${
+                                    className={`w-full py-2 pr-10 border-b-2 outline-none resize-none transition-all duration-300 text-sm font-bold ${
                                         status === 'COMPLETED' && !isFocused
                                             ? 'bg-transparent border-indigo-100 text-indigo-700 h-10 overflow-hidden whitespace-nowrap text-ellipsis' 
                                             : (locked && !isCompleted) || !canInteract
@@ -100,11 +107,31 @@ export const VersoStepItem: React.FC<VersoStepItemProps> = ({
                                                     : 'bg-transparent border-slate-200 text-slate-900 h-10 overflow-hidden whitespace-nowrap text-ellipsis'
                                     }`}
                                 />
-                                {status === 'COMPLETED' && !isFocused && (
-                                    <div className="absolute right-0 top-2 pointer-events-none">
-                                        <CheckCircle2 size={16} className="text-indigo-400" />
-                                    </div>
-                                )}
+                                
+                                {/* Action & Status Area */}
+                                <div className="absolute right-0 top-1 h-full flex items-start pt-1 pr-1 pointer-events-none">
+                                    {/* Success Checkmark: Only visible if completed, not focused, and group not hovered (via opacity trick) */}
+                                    {status === 'COMPLETED' && !isFocused && (
+                                        <div className="absolute top-1 right-0 group-hover/input:opacity-0 transition-opacity duration-200">
+                                            <CheckCircle2 size={18} className="text-emerald-500" />
+                                        </div>
+                                    )}
+                                    
+                                    {/* Trash Button: Visible on hover or focus if value exists */}
+                                    {stepValue && !isReadOnly && canInteract && (
+                                        <button 
+                                            onMouseDown={(e) => e.preventDefault()} // Prevent focus loss on textarea
+                                            onClick={() => onTextClear(step.id)}
+                                            className={`pointer-events-auto p-1.5 rounded-lg text-slate-300 hover:text-red-600 hover:bg-red-50 transition-all ${
+                                                (status === 'COMPLETED' && !isFocused) ? 'opacity-0 group-hover/input:opacity-100 scale-90 group-hover/input:scale-100' : 'opacity-100'
+                                            }`}
+                                            title="Clear text"
+                                        >
+                                            <Trash2 size={16} />
+                                        </button>
+                                    )}
+                                </div>
+
                                 {isFocused && (
                                     <div className="absolute right-0 bottom-2 text-[10px] font-bold text-slate-300 uppercase tracking-wide pointer-events-none animate-in fade-in">
                                         Press Enter to Save

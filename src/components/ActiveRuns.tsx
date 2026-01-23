@@ -26,19 +26,24 @@ const RunController: React.FC<ActiveRunsProps> = ({ onOpenRun, initialFilter }) 
     }
   }, [initialFilter]);
 
-  // VISIBILITY FILTER: Apply same rules as Library/Dashboard
+  // STRICT VISIBILITY FILTER: Apply same rules as Library/Dashboard
   const visibleRuns = runs.filter(run => {
       const def = processes.find(p => p.id === run.versionId);
       if (!def) return false;
 
-      // Rule 1: Admin or External Auditor -> See all
-      if (currentUser.permissions.canManageTeam || currentUser.team === 'External') return true;
+      // 1. Public
+      if (def.isPublic) return true;
 
-      // Rule 2: Own Team -> See all
+      // 2. Owning Team
       if (def.category === currentUser.team) return true;
 
-      // Rule 3: Public Process -> See all
-      if (def.isPublic) return true;
+      // 3. Explicit Governance on Definition
+      const governance = getProcessGovernance(def, users, workspace, teams);
+      if ([governance.editor.id, governance.publisher.id, governance.runValidator.id, governance.executor.id].includes(currentUser.id)) return true;
+
+      // 4. Participant in Run (Started By)
+      // Allows users to track runs they initiated even if they don't own the process definition
+      if (run.startedBy === `${currentUser.firstName} ${currentUser.lastName}`) return true;
 
       return false;
   });

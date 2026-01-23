@@ -3,7 +3,7 @@ import React, { useMemo } from 'react';
 import { 
   ShieldAlert, Activity, ClipboardList, 
   ArrowRight, BadgeCheck, UserCheck, AlertCircle,
-  HeartPulse, Zap, TrendingUp, Bell
+  HeartPulse, Zap, TrendingUp, Bell, Eye, Lock
 } from 'lucide-react';
 import { calculateStatus, resolveEffectiveUser, getProcessGovernance } from '../services/governance';
 import { useUser } from '../contexts/UserContext';
@@ -22,14 +22,23 @@ const Dashboard: React.FC<DashboardProps> = ({ onAction, onNavigate }) => {
 
   // --- 1. DATA PROCESSING ---
 
-  // Filter processes visible to this user
+  // Detect Auditor - No write permissions (Read-Only)
+  const isAuditor = useMemo(() => !Object.values(user.permissions).some(Boolean), [user]);
+
+  // STRICT PRIVACY: Filter processes visible to this user
   const visibleProcesses = useMemo(() => processes.filter(p => {
-    if (user.permissions.canManageTeam) return true;
-    if (user.team === 'External') return true;
-    if (p.category === user.team) return true;
+    // 1. Public (Company-wide)
     if (p.isPublic) return true;
+
+    // 2. Owning Team
+    if (p.category === user.team) return true;
+
+    // 3. Explicit Governance Assignment (Cross-functional access)
+    const governance = getProcessGovernance(p, users, workspace, teams);
+    if ([governance.editor.id, governance.publisher.id, governance.runValidator.id, governance.executor.id].includes(user.id)) return true;
+
     return false;
-  }), [processes, user]);
+  }), [processes, user, users, workspace, teams]);
 
   // Outdated Processes (Governance)
   const outdatedProcesses = useMemo(() => visibleProcesses.filter(p => p.status === 'PUBLISHED' && calculateStatus(p) === 'OUTDATED'), [visibleProcesses]);
@@ -42,19 +51,23 @@ const Dashboard: React.FC<DashboardProps> = ({ onAction, onNavigate }) => {
   }), [tasks, user, users, teams]);
 
   // Pending Validations (For Validators)
+  // STRICT PRIVACY: Admins (canManageTeam) should not see all validations anymore.
   const pendingValidations = useMemo(() => runs.filter(run => {
     if (run.status !== 'IN_REVIEW' && run.status !== 'PENDING_VALIDATION') return false;
     const template = processes.find(p => p.id === run.versionId);
     if (!template) return false;
     
-    // Updated to use runValidator specifically
+    // Only show if the user is the assigned validator
     const { runValidator } = getProcessGovernance(template, users, workspace, teams);
-    const isAdmin = user.permissions.canManageTeam; 
-    return runValidator.id === user.id || isAdmin;
+    return runValidator.id === user.id;
   }), [runs, processes, user, users, workspace, teams]);
 
-  // Active Runs (For Health Calc)
-  const activeRuns = useMemo(() => runs.filter(r => r.status === 'IN_PROGRESS' || r.status === 'READY_TO_SUBMIT'), [runs]);
+  // Active Runs (For Health Calc) - Must filter by visibility first
+  const activeRuns = useMemo(() => runs.filter(r => {
+      const def = visibleProcesses.find(p => p.id === r.versionId);
+      if (!def) return false;
+      return r.status === 'IN_PROGRESS' || r.status === 'READY_TO_SUBMIT';
+  }), [runs, visibleProcesses]);
   
   // Health Calculations
   const averageHealth = useMemo(() => {
@@ -77,6 +90,24 @@ const Dashboard: React.FC<DashboardProps> = ({ onAction, onNavigate }) => {
   return (
     <div className="p-12 max-w-7xl mx-auto animate-in fade-in duration-700">
       
+      {/* AUDITOR MODE BANNER */}
+      {isAuditor && (
+        <div className="bg-[#0F172A] text-white p-6 rounded-3xl mb-12 flex items-center justify-between shadow-2xl shadow-slate-200">
+          <div className="flex items-center gap-5">
+             <div className="w-12 h-12 bg-slate-800 rounded-2xl flex items-center justify-center shrink-0">
+                <Eye size={24} className="text-indigo-400" />
+             </div>
+             <div>
+                <h3 className="text-lg font-bold">Auditor Mode Active</h3>
+                <p className="text-slate-400 text-sm mt-0.5">You have read-only access to the Process Library and Execution Logs for compliance verification.</p>
+             </div>
+          </div>
+          <div className="px-4 py-2 bg-slate-800 rounded-xl border border-slate-700 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-300">
+             <Lock size={12} /> Restricted
+          </div>
+        </div>
+      )}
+
       {/* HEADER */}
       <div className="mb-12">
         <h1 className="text-4xl font-light text-slate-900 tracking-tighter mb-4">Dashboard</h1>
@@ -88,10 +119,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onAction, onNavigate }) => {
 
       {/* KPI GRID */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
-        {/* KPI 1: Pending Actions */}
+        {/* KPI 1: Pending Actions (Hidden for Auditors as it's always 0) */}
         <div 
-          onClick={() => onNavigate('MY_TASKS')}
-          className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col justify-between h-40 relative overflow-hidden group hover:shadow-md transition-all cursor-pointer hover:border-indigo-200"
+          onClick={() => !isAuditor && onNavigate('MY_TASKS')}
+          className={`bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col justify-between h-40 relative overflow-hidden transition-all ${isAuditor ? 'opacity-50 grayscale cursor-not-allowed' : 'cursor-pointer hover:shadow-md hover:border-indigo-200 group'}`}
         >
            <div className="flex justify-between items-start relative z-10">
               <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl group-hover:scale-110 transition-transform"><Zap size={20} /></div>
@@ -161,8 +192,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onAction, onNavigate }) => {
                         {atRiskRuns.map(run => (
                             <div 
                                 key={run.id} 
-                                onClick={() => onAction('RUN', run.id)}
-                                className="bg-red-50/50 border border-red-100 rounded-[2rem] p-6 flex items-center justify-between cursor-pointer hover:bg-red-50 hover:shadow-md transition-all group"
+                                onClick={() => !isAuditor && onAction('RUN', run.id)}
+                                className={`bg-red-50/50 border border-red-100 rounded-[2rem] p-6 flex items-center justify-between transition-all group ${isAuditor ? '' : 'cursor-pointer hover:bg-red-50 hover:shadow-md'}`}
                             >
                                 <div>
                                     <h3 className="font-bold text-slate-900">{run.runName}</h3>
@@ -172,8 +203,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onAction, onNavigate }) => {
                                         <span className="text-slate-500">{run.processTitle}</span>
                                     </div>
                                 </div>
-                                <div className="px-4 py-2 bg-white border border-red-200 text-red-600 text-xs font-bold uppercase rounded-xl group-hover:bg-red-600 group-hover:text-white transition-all">
-                                    Fix Now
+                                <div className={`px-4 py-2 border text-xs font-bold uppercase rounded-xl transition-all ${isAuditor ? 'bg-slate-100 border-slate-200 text-slate-400' : 'bg-white border-red-200 text-red-600 group-hover:bg-red-600 group-hover:text-white'}`}>
+                                    {isAuditor ? 'View Log' : 'Fix Now'}
                                 </div>
                             </div>
                         ))}
@@ -181,18 +212,21 @@ const Dashboard: React.FC<DashboardProps> = ({ onAction, onNavigate }) => {
                 </section>
             )}
 
-            {/* MY TASKS */}
+            {/* MY TASKS - HIDDEN FOR AUDITORS IF EMPTY */}
+            {(!isAuditor || myOpenTasks.length > 0 || pendingValidations.length > 0) && (
             <section>
                 <div className="flex items-center justify-between mb-6">
                     <h2 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.3em] flex items-center gap-3">
-                        <ClipboardList size={16} /> My Tasks
+                        <ClipboardList size={16} /> {isAuditor ? 'Queue Observation' : 'My Tasks'}
                     </h2>
                 </div>
 
                 <div className="space-y-4">
                     {myOpenTasks.length === 0 && pendingValidations.length === 0 ? (
                         <div className="p-12 text-center bg-white border border-slate-100 rounded-[2.5rem]">
-                            <p className="text-slate-400 italic">You're all caught up! No pending actions.</p>
+                            <p className="text-slate-400 italic">
+                                {isAuditor ? 'No active tasks found in your queue.' : 'You\'re all caught up! No pending actions.'}
+                            </p>
                         </div>
                     ) : (
                         <>
@@ -249,6 +283,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onAction, onNavigate }) => {
                     )}
                 </div>
             </section>
+            )}
         </div>
 
         {/* RIGHT COLUMN: LIVE FEED & GOVERNANCE (1/3 width) */}
