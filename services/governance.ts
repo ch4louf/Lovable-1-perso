@@ -245,7 +245,7 @@ export const getDaysUntilExpiration = (process: ProcessDefinition): number => {
 
 /**
  * Check if a user can refresh a process
- * Editors designated for the process OR Team Lead can refresh
+ * Editor OR Publisher OR Team Lead can refresh (no capability required)
  */
 export const canRefreshProcess = (
   user: User,
@@ -259,8 +259,95 @@ export const canRefreshProcess = (
   // Designated Editor can refresh
   if (hasGovernancePermission(user, process, 'EDITOR', workspace, teams)) return true;
   
+  // Designated Publisher can refresh
+  if (hasGovernancePermission(user, process, 'PUBLISHER', workspace, teams)) return true;
+  
   // Team Lead of owning team can refresh (override)
   const owningTeam = teams.find(t => t.name === process.category);
+  if (owningTeam && owningTeam.leadUserId === user.id) return true;
+  
+  return false;
+};
+
+/**
+ * Check if a user can launch a run for a process
+ * Designated Executor OR Designated Validator OR Owning Team member + canExecute capability
+ */
+export const canLaunchRun = (
+  user: User,
+  process: ProcessDefinition,
+  workspace: WorkspaceSettings,
+  teams: Team[]
+): boolean => {
+  // Must have canExecute capability
+  if (!user.permissions.canExecute) return false;
+  
+  // Global Admin can always launch
+  if (isGlobalAdmin(user)) return true;
+  
+  // Designated Executor can launch
+  if (hasGovernancePermission(user, process, 'EXECUTOR', workspace, teams)) return true;
+  
+  // Designated Validator can launch
+  if (hasGovernancePermission(user, process, 'RUN_VALIDATOR', workspace, teams)) return true;
+  
+  // Any member of the Owning Team can launch
+  const owningTeamName = process.category;
+  if (user.team === owningTeamName) return true;
+  
+  // Check team membership via teams array
+  const owningTeam = teams.find(t => t.name === owningTeamName);
+  if (owningTeam && owningTeam.leadUserId === user.id) return true;
+  
+  return false;
+};
+
+/**
+ * Check if a user can see a run instance
+ * Initiator, Designated Executor, Designated Validator, Step Assignee (any status), Entire Owning Team
+ */
+export const canSeeRun = (
+  user: User,
+  run: { startedBy: string; versionId: string },
+  process: ProcessDefinition,
+  tasks: Array<{ runId: string; assigneeUserId?: string; assigneeJobTitle?: string; assigneeTeamId?: string }>,
+  allUsers: User[],
+  workspace: WorkspaceSettings,
+  teams: Team[],
+  runId: string
+): boolean => {
+  // Global Admin can see everything
+  if (isGlobalAdmin(user)) return true;
+  
+  // 1. Initiator: User started the run
+  const userFullName = `${user.firstName} ${user.lastName}`;
+  if (run.startedBy === userFullName) return true;
+  
+  // 2. Designated Executor
+  if (hasGovernancePermission(user, process, 'EXECUTOR', workspace, teams)) return true;
+  
+  // 3. Designated Validator
+  if (hasGovernancePermission(user, process, 'RUN_VALIDATOR', workspace, teams)) return true;
+  
+  // 4. Step Assignee (OPEN or DONE - any status)
+  const runTasks = tasks.filter(t => t.runId === runId);
+  for (const task of runTasks) {
+    const assignee = resolveEffectiveUser(
+      task.assigneeUserId,
+      task.assigneeJobTitle,
+      task.assigneeTeamId,
+      allUsers,
+      teams
+    );
+    if (assignee.id === user.id) return true;
+  }
+  
+  // 5. Entire Owning Team membership
+  const owningTeamName = process.category;
+  if (user.team === owningTeamName) return true;
+  
+  // Also check team lead
+  const owningTeam = teams.find(t => t.name === owningTeamName);
   if (owningTeam && owningTeam.leadUserId === user.id) return true;
   
   return false;
