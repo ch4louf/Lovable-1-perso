@@ -26,24 +26,34 @@ const RunController: React.FC<ActiveRunsProps> = ({ onOpenRun, initialFilter }) 
     }
   }, [initialFilter]);
 
-  // STRICT VISIBILITY FILTER: Apply same rules as Library/Dashboard
+  // STRICT VISIBILITY FILTER: Show runs where user has a stake
   const visibleRuns = runs.filter(run => {
       const def = processes.find(p => p.id === run.versionId);
       if (!def) return false;
 
-      // 1. Public
-      if (def.isPublic) return true;
-
-      // 2. Owning Team
-      if (def.category === currentUser.team) return true;
-
-      // 3. Explicit Governance on Definition
-      const governance = getProcessGovernance(def, users, workspace, teams);
-      if ([governance.editor.id, governance.publisher.id, governance.runValidator.id, governance.executor.id].includes(currentUser.id)) return true;
-
-      // 4. Participant in Run (Started By)
-      // Allows users to track runs they initiated even if they don't own the process definition
+      // 1. User started the run
       if (run.startedBy === `${currentUser.firstName} ${currentUser.lastName}`) return true;
+
+      // 2. User is the designated run validator for this process
+      const governance = getProcessGovernance(def, users, workspace, teams);
+      if (governance.runValidator.id === currentUser.id) return true;
+
+      // 3. User is the designated executor for this process
+      if (governance.executor.id === currentUser.id) return true;
+
+      // 4. User has an open task assigned to them on this run
+      const userTasks = tasks.filter(t => 
+        t.runId === run.id && 
+        t.status === 'OPEN' &&
+        resolveEffectiveUser(t.assigneeUserId, t.assigneeJobTitle, t.assigneeTeamId, users, teams).id === currentUser.id
+      );
+      if (userTasks.length > 0) return true;
+
+      // 5. Admins/Managers can see all runs in their team
+      if (currentUser.permissions.canManageTeam && def.category === currentUser.team) return true;
+
+      // 6. Global admins see everything
+      if (currentUser.permissions.canManageTeam && currentUser.team === 'External') return true;
 
       return false;
   });
