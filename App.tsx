@@ -14,7 +14,7 @@ import {
   Globe,
   Shield
 } from 'lucide-react';
-import { calculateStatus, resolveEffectiveUser, getProcessGovernance, hasGovernancePermission } from './services/governance';
+import { calculateStatus, resolveEffectiveUser, getProcessGovernance, hasGovernancePermission, canLaunchRun, canRefreshProcess } from './services/governance';
 import { ProcessDefinition, ProcessRun, VersionStatus, StepType, Notification } from './types';
 import RectoEditor from './components/RectoEditor';
 import VersoExecution from './components/VersoExecution';
@@ -267,8 +267,9 @@ function InnerApp() {
   };
 
   const handleCreateRun = (process: ProcessDefinition, runName: string) => {
-    if (!currentUser.permissions.canExecute) {
-      showToast("Access Denied: Operation restricted.", 'ERROR');
+    // Check using canLaunchRun: Designated Executor/Validator/Owning Team + canExecute
+    if (!canLaunchRun(currentUser, process, workspace, teams)) {
+      showToast("Access Denied: You are not authorized to launch this process.", 'ERROR');
       return;
     }
 
@@ -417,7 +418,7 @@ function InnerApp() {
           readOnly={isEditorReadOnly} 
           onEdit={() => handleEditIntent(processes.find(p => p.id === selectedProcessId)!)} 
           onViewHistory={(rootId) => handleViewHistory(rootId)}
-          onRun={libraryContext === 'RUN' && currentUser.permissions.canExecute ? () => setRunModalProcess(processes.find(p => p.id === selectedProcessId)!) : undefined}
+          onRun={libraryContext === 'RUN' && (() => { const p = processes.find(p => p.id === selectedProcessId); return p && canLaunchRun(currentUser, p, workspace, teams); })() ? () => setRunModalProcess(processes.find(p => p.id === selectedProcessId)!) : undefined}
         />
       ) : currentView === 'VERSO_EXECUTION' && selectedRunId ? (
         <VersoExecution 
@@ -593,7 +594,7 @@ function InnerApp() {
                           <td className="px-6 py-4 text-right">
                             <div className="flex items-center justify-end gap-2">
                               {libraryContext === 'RUN' ? (
-                                currentUser.permissions.canExecute && (
+                                canLaunchRun(currentUser, p, workspace, teams) && (
                                     <button onClick={() => setRunModalProcess(p)} className="p-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 shadow-sm transition-all flex items-center gap-2 font-bold text-xs uppercase tracking-widest"><Play size={14} fill="currentColor" /> Run</button>
                                 )
                               ) : (

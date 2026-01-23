@@ -1,7 +1,6 @@
-
 import React, { useState, useEffect } from 'react';
 import { Activity, Search, Filter, ArrowRight, PlayCircle, Shield, CheckCircle2, AlertCircle, Clock, List, LayoutGrid, X, Users } from 'lucide-react';
-import { resolveEffectiveUser, getProcessGovernance } from '../services/governance';
+import { resolveEffectiveUser, getProcessGovernance, canSeeRun } from '../services/governance';
 import { useData } from '../contexts/DataContext';
 import { useUser } from '../contexts/UserContext';
 import { ProcessRun } from '../types';
@@ -26,36 +25,28 @@ const RunController: React.FC<ActiveRunsProps> = ({ onOpenRun, initialFilter }) 
     }
   }, [initialFilter]);
 
-  // STRICT VISIBILITY FILTER: Show runs where user has a stake
+  // STRICT VISIBILITY FILTER using governance canSeeRun
+  // Visibility: Initiator, Designated Executor, Designated Validator, 
+  //             Step Assignee (OPEN or DONE), Entire Owning Team
   const visibleRuns = runs.filter(run => {
       const def = processes.find(p => p.id === run.versionId);
       if (!def) return false;
 
-      // 1. User started the run
-      if (run.startedBy === `${currentUser.firstName} ${currentUser.lastName}`) return true;
-
-      // 2. User is the designated run validator for this process
-      const governance = getProcessGovernance(def, users, workspace, teams);
-      if (governance.runValidator.id === currentUser.id) return true;
-
-      // 3. User is the designated executor for this process
-      if (governance.executor.id === currentUser.id) return true;
-
-      // 4. User has an open task assigned to them on this run
-      const userTasks = tasks.filter(t => 
-        t.runId === run.id && 
-        t.status === 'OPEN' &&
-        resolveEffectiveUser(t.assigneeUserId, t.assigneeJobTitle, t.assigneeTeamId, users, teams).id === currentUser.id
+      return canSeeRun(
+        currentUser,
+        { startedBy: run.startedBy, versionId: run.versionId },
+        def,
+        tasks.map(t => ({
+          runId: t.runId,
+          assigneeUserId: t.assigneeUserId,
+          assigneeJobTitle: t.assigneeJobTitle,
+          assigneeTeamId: t.assigneeTeamId
+        })),
+        users,
+        workspace,
+        teams,
+        run.id
       );
-      if (userTasks.length > 0) return true;
-
-      // 5. Admins/Managers can see all runs in their team
-      if (currentUser.permissions.canManageTeam && def.category === currentUser.team) return true;
-
-      // 6. Global admins see everything
-      if (currentUser.permissions.canManageTeam && currentUser.team === 'External') return true;
-
-      return false;
   });
 
   // DATA PREP: Live Runs
