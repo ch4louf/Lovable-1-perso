@@ -45,7 +45,7 @@ const RectoEditor: React.FC<RectoEditorProps> = ({
 
   const isTeamMember = currentUser.team === local.category;
   const isSuperUser = isGlobalAdmin(currentUser);
-  const canEditDefinition = isSuperUser || (isTeamMember && currentUser.team !== 'External' && currentUser.permissions.canDesign);
+  const canEditDefinition = isSuperUser || (isTeamMember && currentUser.team !== 'External' && currentUser.permissions.canDesignProcess);
   const effectiveReadOnly = readOnly || !canEditDefinition;
 
   const isTeamLead = useMemo(() => {
@@ -54,7 +54,7 @@ const RectoEditor: React.FC<RectoEditorProps> = ({
   }, [teams, local.category, currentUser.id]);
 
   const canDelegate = (isTeamLead || isSuperUser) && !effectiveReadOnly;
-  const canPublish = currentUser.permissions.canVerifyDesign && hasGovernancePermission(currentUser, local, 'PUBLISHER', workspace, teams);
+  const canPublish = currentUser.permissions.canPublishProcess && hasGovernancePermission(currentUser, local, 'PUBLISHER', workspace, teams);
 
   // Process Freshness System
   const freshnessStatus = useMemo(() => calculateStatus(local), [local]);

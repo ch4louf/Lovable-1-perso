@@ -151,10 +151,10 @@ const TeamManagement: React.FC<TeamManagementProps> = ({ searchTerm, setSearchTe
   const [isSendingAudit, setIsSendingAudit] = useState(false);
 
   const defaultPerms: UserPermissions = {
-    canDesign: false,
-    canVerifyDesign: false,
-    canExecute: false,
-    canVerifyRun: false,
+    canDesignProcess: false,
+    canPublishProcess: false,
+    canExecuteRun: false,
+    canValidateRun: false,
     canManageTeam: false,
     canAccessBilling: false,
     canAccessWorkspace: false
@@ -244,7 +244,7 @@ const TeamManagement: React.FC<TeamManagementProps> = ({ searchTerm, setSearchTe
         ...newUser, 
         status: 'ACTIVE', 
         invitedAt: new Date().toISOString(), 
-        permissions: { ...defaultPerms, canExecute: true }
+        permissions: { ...defaultPerms, canExecuteRun: true }
       } as User;
       onInviteUser(u);
       setInviteStatus('sent'); 
@@ -410,10 +410,10 @@ const TeamManagement: React.FC<TeamManagementProps> = ({ searchTerm, setSearchTe
     let newPerms: UserPermissions;
     if (preset === 'ADMIN') {
         newPerms = { 
-          canDesign: true, 
-          canVerifyDesign: true, 
-          canExecute: true, 
-          canVerifyRun: true, 
+          canDesignProcess: true, 
+          canPublishProcess: true, 
+          canExecuteRun: true, 
+          canValidateRun: true, 
           canManageTeam: true, 
           canAccessBilling: true,
           canAccessWorkspace: true
@@ -423,7 +423,7 @@ const TeamManagement: React.FC<TeamManagementProps> = ({ searchTerm, setSearchTe
     } else {
         newPerms = { 
           ...defaultPerms,
-          canExecute: true 
+          canExecuteRun: true 
         };
     }
     performUserUpdate(panelUser.id, { ...panelUser, permissions: newPerms });
@@ -492,10 +492,10 @@ const TeamManagement: React.FC<TeamManagementProps> = ({ searchTerm, setSearchTe
       performUserUpdate(panelUser.id, { 
         ...panelUser, 
         permissions: { 
-          canDesign: true, 
-          canVerifyDesign: true, 
-          canExecute: true, 
-          canVerifyRun: true, 
+          canDesignProcess: true, 
+          canPublishProcess: true, 
+          canExecuteRun: true, 
+          canValidateRun: true, 
           canManageTeam: true, 
           canAccessBilling: true,
           canAccessWorkspace: true
@@ -507,7 +507,7 @@ const TeamManagement: React.FC<TeamManagementProps> = ({ searchTerm, setSearchTe
         ...panelUser, 
         permissions: { 
           ...defaultPerms,
-          canExecute: true 
+          canExecuteRun: true 
         } 
       });
     }
@@ -588,10 +588,10 @@ const TeamManagement: React.FC<TeamManagementProps> = ({ searchTerm, setSearchTe
                         {filteredUsers.length === 0 ? <div className="p-12 text-center text-slate-400 italic">No members found.</div> : filteredUsers.map(user => {
                             const p = user.permissions;
                             const activePerms: Array<{ icon: any, label: string, color: string }> = [];
-                            if (p.canDesign) activePerms.push({ icon: Pencil, label: "Designer", color: "indigo" });
-                            if (p.canVerifyDesign) activePerms.push({ icon: ShieldCheck, label: "Publisher", color: "emerald" });
-                            if (p.canExecute) activePerms.push({ icon: Zap, label: "Executor", color: "slate" });
-                            if (p.canVerifyRun) activePerms.push({ icon: CheckSquare, label: "Validator", color: "emerald" });
+                            if (p.canDesignProcess) activePerms.push({ icon: Pencil, label: "Designer", color: "indigo" });
+                            if (p.canPublishProcess) activePerms.push({ icon: ShieldCheck, label: "Publisher", color: "emerald" });
+                            if (p.canExecuteRun) activePerms.push({ icon: Zap, label: "Executor", color: "slate" });
+                            if (p.canValidateRun) activePerms.push({ icon: CheckSquare, label: "Validator", color: "emerald" });
                             if (p.canManageTeam) activePerms.push({ icon: Users, label: "Team Mgr", color: "indigo" });
                             if (p.canAccessBilling) activePerms.push({ icon: CreditCard, label: "Billing", color: "amber" });
 
@@ -868,43 +868,43 @@ const TeamManagement: React.FC<TeamManagementProps> = ({ searchTerm, setSearchTe
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Fine-Grained Access</label>
                         
                         <PermissionToggle 
-                            active={panelUser.permissions.canDesign} 
-                            onClick={() => togglePanelPermission('canDesign')} 
+                            active={panelUser.permissions.canDesignProcess} 
+                            onClick={() => togglePanelPermission('canDesignProcess')} 
                             label="Process Designer" 
                             subLabel="Can create and edit process templates"
                             icon={Pencil}
                             colorClass="indigo"
-                            disabled={isPanelAdmin || !canTogglePermission('canDesign')}
+                            disabled={isPanelAdmin || !canTogglePermission('canDesignProcess')}
                             isInherited={isPanelAdmin}
                         />
                         <PermissionToggle 
-                            active={panelUser.permissions.canVerifyDesign} 
-                            onClick={() => togglePanelPermission('canVerifyDesign')} 
+                            active={panelUser.permissions.canPublishProcess} 
+                            onClick={() => togglePanelPermission('canPublishProcess')} 
                             label="Process Publisher" 
                             subLabel="Can approve and publish drafts"
                             icon={ShieldCheck}
                             colorClass="emerald"
-                            disabled={isPanelAdmin || !canTogglePermission('canVerifyDesign')}
+                            disabled={isPanelAdmin || !canTogglePermission('canPublishProcess')}
                             isInherited={isPanelAdmin}
                         />
                          <PermissionToggle 
-                            active={panelUser.permissions.canExecute} 
-                            onClick={() => togglePanelPermission('canExecute')} 
+                            active={panelUser.permissions.canExecuteRun} 
+                            onClick={() => togglePanelPermission('canExecuteRun')} 
                             label="Run Executor" 
                             subLabel="Can launch and execute runs"
                             icon={Zap}
                             colorClass="slate"
-                            disabled={isPanelAdmin || !canTogglePermission('canExecute')}
+                            disabled={isPanelAdmin || !canTogglePermission('canExecuteRun')}
                             isInherited={isPanelAdmin}
                         />
                          <PermissionToggle 
-                            active={panelUser.permissions.canVerifyRun} 
-                            onClick={() => togglePanelPermission('canVerifyRun')} 
+                            active={panelUser.permissions.canValidateRun} 
+                            onClick={() => togglePanelPermission('canValidateRun')} 
                             label="Run Validator" 
                             subLabel="Can sign-off and approve completed runs"
                             icon={CheckSquare}
                             colorClass="emerald"
-                            disabled={isPanelAdmin || !canTogglePermission('canVerifyRun')}
+                            disabled={isPanelAdmin || !canTogglePermission('canValidateRun')}
                             isInherited={isPanelAdmin}
                         />
                          <PermissionToggle 
