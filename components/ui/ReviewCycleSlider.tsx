@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 
 interface ReviewCycleSliderProps {
   value: number; // Always stored in days
@@ -47,19 +47,10 @@ export const ReviewCycleSlider: React.FC<ReviewCycleSliderProps> = ({
     setDaysInput(String(value));
   }, [value, daysToMonths]);
 
-  // Calculate slider position percentage
-  const percentage = useMemo(() => {
-    if (activeMode === 'months') {
-      const months = daysToMonths(value);
-      const tickIdx = MONTH_TICKS.indexOf(months);
-      if (tickIdx >= 0) {
-        return (tickIdx / (MONTH_TICKS.length - 1)) * 100;
-      }
-      // For manual values, interpolate
-      return ((months - 1) / 11) * 100;
-    }
-    return ((value - 1) / 364) * 100;
-  }, [value, activeMode, daysToMonths]);
+  // Get current slider position (0-3 for months mode)
+  const sliderPosition = activeMode === 'months' 
+    ? getTickIndex(getClosestTick(daysToMonths(value))) 
+    : value;
 
   const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const sliderValue = parseInt(e.target.value);
@@ -115,37 +106,28 @@ export const ReviewCycleSlider: React.FC<ReviewCycleSliderProps> = ({
   const selectMonthsMode = () => setActiveMode('months');
   const selectDaysMode = () => setActiveMode('days');
 
-  // Current slider values based on mode
-  // In months mode: slider goes 0-3 (indexes of MONTH_TICKS)
-  // In days mode: slider goes 1-365
+  // Slider config based on mode
   const sliderMin = activeMode === 'months' ? 0 : 1;
   const sliderMax = activeMode === 'months' ? MONTH_TICKS.length - 1 : 365;
-  const sliderValue = activeMode === 'months' 
-    ? getTickIndex(getClosestTick(daysToMonths(value))) 
-    : value;
-  const sliderStep = 1;
 
   return (
     <div className={`${disabled ? 'opacity-50 pointer-events-none' : ''}`}>
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-4">
         
         {/* Months Input Box */}
         <button
           onClick={selectMonthsMode}
-          className={`
-            flex flex-col items-center transition-all duration-150
-            ${activeMode === 'months' ? '' : 'opacity-60'}
-          `}
+          className="flex flex-col items-center transition-all duration-200"
         >
-          <span className={`text-[9px] font-bold uppercase tracking-wider mb-1 transition-colors ${
+          <span className={`text-[10px] font-semibold uppercase tracking-wider mb-1.5 transition-colors ${
             activeMode === 'months' ? 'text-indigo-600' : 'text-slate-400'
           }`}>
             Months
           </span>
           <div className={`
-            relative w-14 h-10 rounded-lg border-2 transition-all duration-150 overflow-hidden
+            relative w-16 h-11 rounded-xl border-2 transition-all duration-200 overflow-hidden
             ${activeMode === 'months' 
-              ? 'border-indigo-500 bg-indigo-50 shadow-sm' 
+              ? 'border-indigo-500 bg-gradient-to-b from-indigo-50 to-white shadow-lg shadow-indigo-100' 
               : 'border-slate-200 bg-white hover:border-slate-300'
             }
           `}>
@@ -159,82 +141,61 @@ export const ReviewCycleSlider: React.FC<ReviewCycleSliderProps> = ({
               disabled={disabled}
               maxLength={2}
               className={`
-                w-full h-full text-center font-bold text-lg bg-transparent outline-none
-                ${activeMode === 'months' ? 'text-indigo-700' : 'text-slate-600'}
+                w-full h-full text-center font-bold text-xl bg-transparent outline-none
+                ${activeMode === 'months' ? 'text-indigo-700' : 'text-slate-500'}
               `}
             />
           </div>
         </button>
 
-        {/* Slider Track */}
-        <div className="flex-1 relative">
-          <div className="relative h-10 flex items-center">
-            {/* Track Background */}
-            <div className="absolute inset-x-0 h-1.5 bg-slate-200 rounded-full" />
+        {/* Premium Slider Track */}
+        <div className="flex-1 relative px-2">
+          <div className="relative h-12 flex items-center">
+            {/* Track Background with gradient */}
+            <div className="absolute inset-x-0 h-2 bg-gradient-to-r from-slate-200 via-slate-100 to-slate-200 rounded-full shadow-inner" />
             
             {/* Active Track Fill */}
             <div 
-              className="absolute h-1.5 bg-indigo-500 rounded-full transition-all duration-100"
-              style={{ width: `${Math.max(0, Math.min(100, percentage))}%` }}
+              className="absolute h-2 bg-gradient-to-r from-indigo-500 to-indigo-400 rounded-full transition-all duration-150 ease-out shadow-sm"
+              style={{ 
+                width: activeMode === 'months' 
+                  ? `${(sliderPosition / 3) * 100}%` 
+                  : `${((value - 1) / 364) * 100}%` 
+              }}
             />
-            
-            {/* Tick Marks - only show in months mode */}
-            {activeMode === 'months' && (
-              <div className="absolute inset-x-0 flex items-center pointer-events-none">
-                {MONTH_TICKS.map((month) => {
-                  const tickPercent = ((month - 1) / 11) * 100;
-                  const isActive = daysToMonths(value) >= month;
-                  const isCurrent = daysToMonths(value) === month;
-                  return (
-                    <div
-                      key={month}
-                      className="absolute flex flex-col items-center -translate-x-1/2"
-                      style={{ left: `${tickPercent}%` }}
-                    >
-                      <div className={`w-0.5 h-3 rounded-full transition-colors ${
-                        isActive ? 'bg-indigo-400' : 'bg-slate-300'
-                      }`} />
-                      <span className={`text-[9px] font-semibold mt-1 transition-colors ${
-                        isCurrent ? 'text-indigo-600' : isActive ? 'text-slate-500' : 'text-slate-300'
-                      }`}>
-                        {month}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
 
             {/* Range Input */}
             <input
               type="range"
               min={sliderMin}
               max={sliderMax}
-              step={sliderStep}
-              value={sliderValue}
+              step={1}
+              value={sliderPosition}
               onChange={handleSliderChange}
               disabled={disabled}
-              className="absolute inset-x-0 w-full h-10 appearance-none bg-transparent cursor-pointer z-10
+              className="absolute inset-x-0 w-full h-12 appearance-none bg-transparent cursor-pointer z-10
                 [&::-webkit-slider-thumb]:appearance-none
-                [&::-webkit-slider-thumb]:w-5
-                [&::-webkit-slider-thumb]:h-5
+                [&::-webkit-slider-thumb]:w-6
+                [&::-webkit-slider-thumb]:h-6
                 [&::-webkit-slider-thumb]:rounded-full
                 [&::-webkit-slider-thumb]:bg-white
-                [&::-webkit-slider-thumb]:border-2
+                [&::-webkit-slider-thumb]:border-[3px]
                 [&::-webkit-slider-thumb]:border-indigo-500
-                [&::-webkit-slider-thumb]:shadow-md
+                [&::-webkit-slider-thumb]:shadow-lg
+                [&::-webkit-slider-thumb]:shadow-indigo-200
                 [&::-webkit-slider-thumb]:cursor-grab
                 [&::-webkit-slider-thumb]:active:cursor-grabbing
                 [&::-webkit-slider-thumb]:hover:scale-110
-                [&::-webkit-slider-thumb]:active:scale-105
-                [&::-webkit-slider-thumb]:transition-transform
-                [&::-moz-range-thumb]:w-5
-                [&::-moz-range-thumb]:h-5
+                [&::-webkit-slider-thumb]:active:scale-100
+                [&::-webkit-slider-thumb]:transition-all
+                [&::-webkit-slider-thumb]:duration-150
+                [&::-moz-range-thumb]:w-6
+                [&::-moz-range-thumb]:h-6
                 [&::-moz-range-thumb]:rounded-full
                 [&::-moz-range-thumb]:bg-white
-                [&::-moz-range-thumb]:border-2
+                [&::-moz-range-thumb]:border-[3px]
                 [&::-moz-range-thumb]:border-indigo-500
-                [&::-moz-range-thumb]:shadow-md
+                [&::-moz-range-thumb]:shadow-lg
                 [&::-moz-range-thumb]:cursor-grab
               "
             />
@@ -244,20 +205,17 @@ export const ReviewCycleSlider: React.FC<ReviewCycleSliderProps> = ({
         {/* Days Input Box */}
         <button
           onClick={selectDaysMode}
-          className={`
-            flex flex-col items-center transition-all duration-150
-            ${activeMode === 'days' ? '' : 'opacity-60'}
-          `}
+          className="flex flex-col items-center transition-all duration-200"
         >
-          <span className={`text-[9px] font-bold uppercase tracking-wider mb-1 transition-colors ${
+          <span className={`text-[10px] font-semibold uppercase tracking-wider mb-1.5 transition-colors ${
             activeMode === 'days' ? 'text-indigo-600' : 'text-slate-400'
           }`}>
             Days
           </span>
           <div className={`
-            relative w-14 h-10 rounded-lg border-2 transition-all duration-150 overflow-hidden
+            relative w-16 h-11 rounded-xl border-2 transition-all duration-200 overflow-hidden
             ${activeMode === 'days' 
-              ? 'border-indigo-500 bg-indigo-50 shadow-sm' 
+              ? 'border-indigo-500 bg-gradient-to-b from-indigo-50 to-white shadow-lg shadow-indigo-100' 
               : 'border-slate-200 bg-white hover:border-slate-300'
             }
           `}>
@@ -271,8 +229,8 @@ export const ReviewCycleSlider: React.FC<ReviewCycleSliderProps> = ({
               disabled={disabled}
               maxLength={3}
               className={`
-                w-full h-full text-center font-bold text-lg bg-transparent outline-none
-                ${activeMode === 'days' ? 'text-indigo-700' : 'text-slate-600'}
+                w-full h-full text-center font-bold text-xl bg-transparent outline-none
+                ${activeMode === 'days' ? 'text-indigo-700' : 'text-slate-500'}
               `}
             />
           </div>
