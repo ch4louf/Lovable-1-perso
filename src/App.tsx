@@ -140,7 +140,7 @@ function InnerApp() {
   };
 
   const handleEditIntent = (p: ProcessDefinition) => {
-    const hasPermission = currentUser.permissions.canDesign;
+    const hasPermission = currentUser.permissions.canDesignProcess;
     if (!hasPermission) {
       showToast("Access Denied: Restricted capability.", 'ERROR');
       openProcess(p, true);
@@ -230,7 +230,7 @@ function InnerApp() {
 
   const publishDraft = (draft: ProcessDefinition) => {
     // PBAC: Check pure permissions
-    const hasPermission = currentUser.permissions.canVerifyDesign;
+    const hasPermission = currentUser.permissions.canPublishProcess;
     if (!hasPermission) {
       showToast("Access Denied: Verification permission required.", 'ERROR');
       return;
@@ -268,7 +268,7 @@ function InnerApp() {
   };
 
   const handleCreateRun = (process: ProcessDefinition, runName: string) => {
-    // Check using canLaunchRun: Designated Executor/Validator/Owning Team + canExecute
+    // Check using canLaunchRun: Designated Executor/Validator/Owning Team + canExecuteRun
     if (!canLaunchRun(currentUser, process, workspace, teams)) {
       showToast("Access Denied: You are not authorized to launch this process.", 'ERROR');
       return;
@@ -498,7 +498,7 @@ function InnerApp() {
                 </div>
               </div>
               <div className="flex justify-end flex-1">
-                {libraryContext === 'DESIGN' && (currentUser.permissions.canDesign || currentUser.permissions.canManageTeam) && (
+                {libraryContext === 'DESIGN' && (currentUser.permissions.canDesignProcess || currentUser.permissions.canManageTeam) && (
                   <button onClick={() => {
                     const newId = `p-${Date.now()}`;
                     const newP: ProcessDefinition = { 

@@ -35,8 +35,8 @@ const Layout: React.FC<LayoutProps> = ({
 
   const perms = currentUser.permissions;
   const canManageTeam = perms.canManageTeam;
-  const canAccessDesign = perms.canDesign || perms.canVerifyDesign;
-  const canAccessOps = perms.canExecute || perms.canVerifyRun;
+  const canAccessDesign = perms.canDesignProcess || perms.canPublishProcess;
+  const canAccessOps = perms.canExecuteRun || perms.canValidateRun;
   const canAccessBilling = perms.canAccessBilling;
   const canAccessWorkspace = perms.canAccessWorkspace;
   const isAuditor = !Object.values(perms).some(Boolean);

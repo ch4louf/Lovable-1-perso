@@ -39,19 +39,45 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Migrate: ensure all users have canAccessWorkspace field
     let needsMigration = false;
     allUsers = allUsers.map(u => {
-      if (u.permissions && u.permissions.canAccessWorkspace === undefined) {
-        needsMigration = true;
-        // If user had all admin perms before, give them canAccessWorkspace
-        const wasAdmin = u.permissions.canDesign && u.permissions.canVerifyDesign && 
-                         u.permissions.canExecute && u.permissions.canVerifyRun && 
-                         u.permissions.canManageTeam && u.permissions.canAccessBilling;
-        return { 
-          ...u, 
-          permissions: { 
-            ...u.permissions, 
-            canAccessWorkspace: wasAdmin 
-          } 
-        };
+      if (u.permissions) {
+        let needsUpdate = false;
+        const newPerms = { ...u.permissions } as any;
+        
+        // Migrate old permission names to new ones
+        if ('canDesign' in newPerms) {
+          newPerms.canDesignProcess = newPerms.canDesign;
+          delete newPerms.canDesign;
+          needsUpdate = true;
+        }
+        if ('canVerifyDesign' in newPerms) {
+          newPerms.canPublishProcess = newPerms.canVerifyDesign;
+          delete newPerms.canVerifyDesign;
+          needsUpdate = true;
+        }
+        if ('canExecute' in newPerms) {
+          newPerms.canExecuteRun = newPerms.canExecute;
+          delete newPerms.canExecute;
+          needsUpdate = true;
+        }
+        if ('canVerifyRun' in newPerms) {
+          newPerms.canValidateRun = newPerms.canVerifyRun;
+          delete newPerms.canVerifyRun;
+          needsUpdate = true;
+        }
+        
+        // Ensure canAccessWorkspace exists
+        if (newPerms.canAccessWorkspace === undefined) {
+          const wasAdmin = newPerms.canDesignProcess && newPerms.canPublishProcess && 
+                           newPerms.canExecuteRun && newPerms.canValidateRun && 
+                           newPerms.canManageTeam && newPerms.canAccessBilling;
+          newPerms.canAccessWorkspace = wasAdmin;
+          needsUpdate = true;
+        }
+        
+        if (needsUpdate) {
+          needsMigration = true;
+          return { ...u, permissions: newPerms };
+        }
       }
       return u;
     });

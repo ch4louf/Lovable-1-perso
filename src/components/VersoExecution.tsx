@@ -30,7 +30,7 @@ const VersoExecution: React.FC<VersoExecutionProps> = ({ process, instance, onUp
   }, [allUsers, instance.startedBy]);
 
   const isGlobalAdminUser = isGlobalAdmin(currentUser);
-  const canApprove = (hasGovernancePermission(currentUser, process, 'RUN_VALIDATOR', workspace, teams)) && currentUser.permissions.canVerifyRun;
+  const canApprove = (hasGovernancePermission(currentUser, process, 'RUN_VALIDATOR', workspace, teams)) && currentUser.permissions.canValidateRun;
   
   const isExecutorTeamMember = currentUser.team === (process.executor_team_id || process.category);
   const isExplicitExecutor = process.executor_user_id === currentUser.id;

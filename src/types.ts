@@ -163,10 +163,10 @@ export interface Notification {
 }
 
 export interface UserPermissions {
-  canDesign: boolean;        
-  canVerifyDesign: boolean;  
-  canExecute: boolean;       
-  canVerifyRun: boolean;     
+  canDesignProcess: boolean;        
+  canPublishProcess: boolean;  
+  canExecuteRun: boolean;       
+  canValidateRun: boolean;     
   canManageTeam: boolean;    
   canAccessBilling: boolean;
   canAccessWorkspace: boolean;

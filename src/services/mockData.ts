@@ -19,11 +19,11 @@ const getFutureDate = (daysOffset: number) => {
 const generateId = (prefix: string) => `${prefix}-${Math.random().toString(36).substr(2, 9)}`;
 
 // --- PERMISSIONS PRESETS ---
-const adminPerms: UserPermissions = { canDesign: true, canVerifyDesign: true, canExecute: true, canVerifyRun: true, canManageTeam: true, canAccessBilling: true, canAccessWorkspace: true };
-const managerPerms: UserPermissions = { canDesign: true, canVerifyDesign: true, canExecute: true, canVerifyRun: true, canManageTeam: false, canAccessBilling: false, canAccessWorkspace: false };
-const opsPerms: UserPermissions = { canDesign: false, canVerifyDesign: false, canExecute: true, canVerifyRun: false, canManageTeam: false, canAccessBilling: false, canAccessWorkspace: false };
-const compliancePerms: UserPermissions = { canDesign: false, canVerifyDesign: false, canExecute: false, canVerifyRun: true, canManageTeam: false, canAccessBilling: false, canAccessWorkspace: false };
-const readOnlyPerms: UserPermissions = { canDesign: false, canVerifyDesign: false, canExecute: false, canVerifyRun: false, canManageTeam: false, canAccessBilling: false, canAccessWorkspace: false };
+const adminPerms: UserPermissions = { canDesignProcess: true, canPublishProcess: true, canExecuteRun: true, canValidateRun: true, canManageTeam: true, canAccessBilling: true, canAccessWorkspace: true };
+const managerPerms: UserPermissions = { canDesignProcess: true, canPublishProcess: true, canExecuteRun: true, canValidateRun: true, canManageTeam: false, canAccessBilling: false, canAccessWorkspace: false };
+const opsPerms: UserPermissions = { canDesignProcess: false, canPublishProcess: false, canExecuteRun: true, canValidateRun: false, canManageTeam: false, canAccessBilling: false, canAccessWorkspace: false };
+const compliancePerms: UserPermissions = { canDesignProcess: false, canPublishProcess: false, canExecuteRun: false, canValidateRun: true, canManageTeam: false, canAccessBilling: false, canAccessWorkspace: false };
+const readOnlyPerms: UserPermissions = { canDesignProcess: false, canPublishProcess: false, canExecuteRun: false, canValidateRun: false, canManageTeam: false, canAccessBilling: false, canAccessWorkspace: false };
 
 // --- 1. NEXUS CORP DIRECTORY (25 Users) ---
 export const MOCK_USERS: User[] = [
@@ -41,7 +41,7 @@ export const MOCK_USERS: User[] = [
   // IT & ENGINEERING (The Fixers)
   { id: 'u-8', firstName: 'David', lastName: 'Chen', email: 'david@nexus.corp', jobTitle: 'IT Manager', team: 'IT', status: 'ACTIVE', permissions: managerPerms },
   { id: 'u-9', firstName: 'Grace', lastName: 'Hopper', email: 'grace@nexus.corp', jobTitle: 'DevOps Engineer', team: 'IT', status: 'ACTIVE', permissions: opsPerms },
-  { id: 'u-10', firstName: 'Noah', lastName: 'Sols', email: 'noah@nexus.corp', jobTitle: 'Security Analyst', team: 'IT', status: 'ACTIVE', permissions: { ...opsPerms, canVerifyRun: true } },
+  { id: 'u-10', firstName: 'Noah', lastName: 'Sols', email: 'noah@nexus.corp', jobTitle: 'Security Analyst', team: 'IT', status: 'ACTIVE', permissions: { ...opsPerms, canValidateRun: true } },
   { id: 'u-11', firstName: 'Paul', lastName: 'Allen', email: 'paul@nexus.corp', jobTitle: 'Systems Architect', team: 'IT', status: 'ACTIVE', permissions: managerPerms },
 
   // LEGAL & COMPLIANCE (The Blockers)

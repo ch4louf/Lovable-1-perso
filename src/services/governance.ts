@@ -271,7 +271,7 @@ export const canRefreshProcess = (
 
 /**
  * Check if a user can launch a run for a process
- * Designated Executor OR Designated Validator OR Owning Team member + canExecute capability
+ * Designated Executor OR Designated Validator OR Owning Team member + canExecuteRun capability
  */
 export const canLaunchRun = (
   user: User,
@@ -279,8 +279,8 @@ export const canLaunchRun = (
   workspace: WorkspaceSettings,
   teams: Team[]
 ): boolean => {
-  // Must have canExecute capability
-  if (!user.permissions.canExecute) return false;
+  // Must have canExecuteRun capability
+  if (!user.permissions.canExecuteRun) return false;
   
   // Global Admin can always launch
   if (isGlobalAdmin(user)) return true;
