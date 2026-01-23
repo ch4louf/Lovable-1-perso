@@ -326,23 +326,26 @@ function InnerApp() {
     });
   };
 
-  // VISIBILITY FILTERING LOGIC - STRICT PRIVACY
+  // VISIBILITY FILTERING LOGIC - STRICT PRIVACY (Context-aware per Governance Matrix)
   const visibleProcesses = useMemo(() => {
     return processes.filter(p => {
-        // 1. Public (Company-wide)
-        if (p.isPublic) return true;
-
-        // 2. Owning Team
+        const governance = getProcessGovernance(p, users, workspace, teams);
+        
+        // 1. Owning Team - always visible in both contexts
         if (p.category === currentUser.team) return true;
 
-        // 3. Explicit Governance Assignment (Cross-functional access)
-        // If the user is explicitly named as Editor/Publisher/etc on a private process
-        const governance = getProcessGovernance(p, users, workspace, teams);
-        if ([governance.editor.id, governance.publisher.id, governance.runValidator.id, governance.executor.id].includes(currentUser.id)) return true;
+        if (libraryContext === 'DESIGN') {
+            // DESIGN visibility: Owning Team + Editor + Publisher
+            if ([governance.editor.id, governance.publisher.id].includes(currentUser.id)) return true;
+        } else {
+            // RUN visibility: Owning Team + Executor + Validator + isPublic
+            if (p.isPublic) return true;
+            if ([governance.executor.id, governance.runValidator.id].includes(currentUser.id)) return true;
+        }
 
         return false;
     });
-  }, [processes, currentUser, users, workspace, teams]);
+  }, [processes, currentUser, users, workspace, teams, libraryContext]);
 
   const groupedProcesses = useMemo(() => {
     const latestVersions: Record<string, ProcessDefinition> = {};
